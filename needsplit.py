@@ -6,9 +6,10 @@ import os, sys
 from urllib.parse import parse_qs, urlparse
 import hashlib
 import pandas as pd
-from utils import ist_datatime, round_to_nearest_0_05, place_sell_order,place_buy_order,place_limit_order,place_market_order, is_order_complete
+from utils import ist_datatime, round_to_nearest_0_05, place_limit_order, place_market_order, place_market_exit, is_order_complete
+from broker import getflattradeapi, getshoonyatradeapi
 import pytz
-from NorenRestApiPy.NorenApi import NorenApi
+
 
 
 
@@ -49,7 +50,7 @@ PRICE_DATA = {
     }
 }
 ORDER_STATUS = {}
-ORDER_ID_DATAS = []
+ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY = []
 
 # flag to tell us if the websocket is open
 socket_opened = False
@@ -63,23 +64,8 @@ ce_lots = INITIAL_LOTS
 pe_lots = INITIAL_LOTS
 
 
-
-
-# Credentials - define these variables
-password = 'Deepak@94'
-userid = 'FT053455'
-token = '79454ecf851e5a4daa328d39ddb92927b4c60da7372935b287a00273e2ad7a05'
-
-
-class FlatTradeApiPy(NorenApi):
-    def __init__(self):
-        NorenApi.__init__(self, host='https://piconnect.flattrade.in/PiConnectTP/', 
-                          websocket='wss://piconnect.flattrade.in/PiConnectWSTp/')
-
-api = FlatTradeApiPy()
-api.set_session(userid=userid, password=password, usertoken=token)  # Set UID and token here
-
-
+api = getflattradeapi()
+api = getshoonyatradeapi()
 
 
 
@@ -101,6 +87,8 @@ def event_handler_order_update(message):
         ORDER_STATUS[message['norenordno']]['status'] = message['status']
         ORDER_STATUS[message['norenordno']]['flqty'] =  message.get('flqty', 0)
         ORDER_STATUS[message['norenordno']]['qty'] =  message.get('qty', 0)
+        ORDER_STATUS[message['norenordno']]['tsym'] =  message.get('tsym', 0)
+        ORDER_STATUS[message['norenordno']]['trantype'] =  message.get('trantype', 'S')
 
         # print('norenordno')
         # print(message['status'].lower())
@@ -173,19 +161,18 @@ def open_socket():
 def fetch_atm_strike():
     global LEG_TOKEN, SYMBOLDICT
 
-    print('entered fetch_atm_strike')
     socket = threading.Thread(target=open_socket, args=())
     socket.start()
-    
 
-    api.searchscrip(exchange='NSE', searchtext=SYMBOL)
     banknifty_price = api.get_quotes(exchange='NSE', token='26009')
     current_price = banknifty_price['lp']
     print(float(current_price))
     atm_strike = round(float(current_price) / 100) * 100
     print(atm_strike)
+
     nearest_symbol_ce = (str(atm_strike+STRIKE_DIFFERENCE)+' nifty bANK' + ' ce')
     nearest_symbol_pe = (str(atm_strike-STRIKE_DIFFERENCE)+' nifty bANK' + ' pe')
+
     # print(nearest_symbol_ce)
     # print(api.searchscrip(exchange='NFO', searchtext=nearest_symbol_ce))
     # print(api.searchscrip(exchange='NFO', searchtext=nearest_symbol_pe))
@@ -286,31 +273,30 @@ def monitor_leg(option_type, sell_price, strike_price):
     leg_entry = False
     lots = INITIAL_LOTS * ONE_LOT_QUANTITY
     buy_back_lots = BUY_BACK_LOTS * ONE_LOT_QUANTITY
-    print('monitor ')
-    print(option_type)
+    print('monitor '+option_type)
     while strategy_running and not leg_entry:
         # print('while check monitor')
         ltp = fetch_last_trade_price(option_type)  # Fetch LTP for the option leg
         if ltp <= (float(sell_price) * float(SAFETY_STOP_LOSS_PERCENTAGE)):
             leg_entry = True
             print(f"{option_type} reached 76% of sell price, exiting...")
-            safety_sell_order_id = place_buy_order(api, SYMBOLDICT,LEG_TOKEN, option_type, lots)
-            ORDER_ID_DATAS.append(safety_sell_order_id)
-            print('dd')
-            while not is_order_complete(safety_sell_order_id, ORDER_STATUS):
+            safety_sell_order_id = place_market_order(api, LEG_TOKEN, option_type, 'B', lots)
+
+            while not wait_for_orders_to_complete(safety_sell_order_id, 100):
                 time.sleep(0.5)
 
+            ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY.append(safety_sell_order_id)
             # important need to check for order execution if not succeded then retry with modify 
             buy_back_price = round_to_nearest_0_05(float(sell_price) * float(BUY_BACK_PERCENTAGE))
-            buy_order_id = place_limit_order(api, SYMBOLDICT,LEG_TOKEN, option_type, 'B', buy_back_lots, limit_price=buy_back_price)
-            ORDER_ID_DATAS.append(buy_order_id)
+            buy_order_id = place_limit_order(api, LEG_TOKEN, option_type, 'B', buy_back_lots, limit_price=buy_back_price)
+            ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY.append(buy_order_id)
 
             while not is_order_complete(buy_order_id, ORDER_STATUS):
                 time.sleep(1)
             
             sell_target_price = round_to_nearest_0_05(float(buy_back_price) * float(1 + SELL_TARGET_PERCENTAGE))
-            sell_order_id = place_limit_order(api, SYMBOLDICT,LEG_TOKEN, option_type, 'S', buy_back_lots, limit_price=sell_target_price)
-            ORDER_ID_DATAS.append(sell_order_id)
+            sell_order_id = place_limit_order(api, LEG_TOKEN, option_type, 'S', buy_back_lots, limit_price=sell_target_price)
+            ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY.append(sell_order_id)
             ltp = fetch_last_trade_price(option_type)  # Fetch LTP for the option leg
 
             while not is_order_complete(sell_order_id, ORDER_STATUS): #static instead check weather ltp > selltarget_price
@@ -320,13 +306,14 @@ def monitor_leg(option_type, sell_price, strike_price):
                     print(f"{option_type} reached 10% loss, exiting remaining orders.")
                     unsold_lots = check_unsold_lots(sell_order_id)
                     api.cancel_order(sell_order_id)
-                    place_market_order(api, SYMBOLDICT,LEG_TOKEN, option_type, 'B', unsold_lots)
+                    place_market_order(api, LEG_TOKEN, option_type, 'B', unsold_lots)
                     break
                 time.sleep(1)
             
-            if is_order_complete(sell_order_id, ORDER_STATUS):
-                re_sell_order_id = place_sell_order(api, SYMBOLDICT,LEG_TOKEN, option_type, lots)
-                ORDER_ID_DATAS.append(re_sell_order_id)
+            if wait_for_orders_to_complete(sell_order_id, 40):
+                re_sell_order_id = place_market_order(api, LEG_TOKEN, option_type, 'S', lots)
+                wait_for_orders_to_complete(re_sell_order_id, 100)
+                ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY.append(re_sell_order_id)
 
     return True
 
@@ -349,29 +336,30 @@ def monitor_strategy():
 
 
 # Retry logic with a maximum number of attempts to avoid an infinite loop
-def wait_for_orders_to_complete(ce_order_id, pe_order_id, max_retries=100):
+def wait_for_orders_to_complete(order_ids, max_retries=100):
     global ORDER_STATUS
     attempts = 0
-    print('wait_for_orders_to_complete')
-    print(ORDER_STATUS)
-    while not (is_order_complete(ce_order_id, ORDER_STATUS) and is_order_complete(pe_order_id, ORDER_STATUS)):
+
+    # Ensure order_ids is always treated as a list
+    if isinstance(order_ids, str):
+        order_ids = [order_ids]
+
+    # Loop until all orders are complete or max_retries is reached
+    while not all(is_order_complete(order_id, ORDER_STATUS) for order_id in order_ids):
         # Sleep for 0.25 seconds
         time.sleep(0.25)
         attempts += 1
-        print("ORDER_STATUS[order_id].get('status')")
-        print(ORDER_STATUS)
-        print(is_order_complete(ce_order_id, ORDER_STATUS) and is_order_complete(pe_order_id, ORDER_STATUS))
-        # print(ORDER_STATUS)
-        # print(ce_order_id)
-        # print(pe_order_id)
 
         # Check if maximum retries reached
         if attempts >= max_retries:
-            print(f"Max retries reached. Orders may not be complete: {ce_order_id}, {pe_order_id}")
-            break
-    else:
-        print("Both orders are complete.")
-        return True
+            print(f"Max retries reached. Orders may not be complete: {', '.join(order_ids)}")
+            raise ValueError(f"Max retries reached. Orders may not be complete: {', '.join(order_ids)}")
+
+    # If all orders are complete
+    print("All orders are complete.")
+    return True
+
+
 
 # Function to exit the strategy
 def exit_strategy():
@@ -382,7 +370,13 @@ def exit_strategy():
         if ORDER_STATUS[key]['status'].lower() != 'complete':
             responce = api.cancel_order(key)
             if 'Ok ' in responce['stat']:
-                return True # static place_buy_order()    
+                qty = ORDER_STATUS[key]['qty']
+                tsym = ORDER_STATUS[key]['tsym']
+                typ = ORDER_STATUS[key]['trantype']
+                
+                order_id = place_market_exit(api, tsym, typ, qty)
+                wait_for_orders_to_complete(order_id, 100)
+                return True # static place_market_order()    
     
     # Implement logic to close all open orders and exit strategy
     print("Strategy exited.")
@@ -399,29 +393,17 @@ def run_strategy():
                 atm_strike = fetch_atm_strike()
                 print('passed atm strike')
 
-                ce_order_id = place_sell_order(api, SYMBOLDICT,LEG_TOKEN, 'CE', lots)
-                pe_order_id = place_sell_order(api, SYMBOLDICT,LEG_TOKEN, 'PE', lots)
-                ORDER_ID_DATAS.append(ce_order_id)
-                ORDER_ID_DATAS.append(pe_order_id)
-                time.sleep(2)
-                wait_for_orders_to_complete(ce_order_id, pe_order_id, 4000)
+                ce_order_id = place_market_order(api, LEG_TOKEN, 'CE', 'S', lots)
+                pe_order_id = place_market_order(api, LEG_TOKEN, 'PE', 'S', lots)
+                time.sleep(1)
+                wait_for_orders_to_complete([ce_order_id, pe_order_id], 40)
 
+                ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY.append(ce_order_id)
+                ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY.append(pe_order_id)
 
-                print('---------------------------------------------')
-                print('status order')
-
-                print(ORDER_STATUS)
                 sell_price_ce =  ORDER_STATUS[ce_order_id]['avgprc']
-
-
-
-                print('ORDER_STATUS')
-                print(ORDER_STATUS)
                 sell_price_pe = ORDER_STATUS[pe_order_id]['avgprc']
-                print('---------------------------------------------')
-                print(sell_price_ce)
-                print(sell_price_pe)
-                print('---------------------------------------------')
+
                 strategy_running = True
 
                 ce_thread = threading.Thread(target=monitor_leg, args=('CE', sell_price_ce, atm_strike + STRIKE_DIFFERENCE))
@@ -439,6 +421,7 @@ def run_strategy():
         else:
             print("Outside trading hours, strategy paused.")
             time.sleep(60)
+            raise ValueError("Outside trading hours, strategy paused.")
 
 
 

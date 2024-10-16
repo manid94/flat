@@ -11,36 +11,20 @@ def round_to_nearest_0_05(value):
 
 
 # Function to place sell orders for both legs
-def place_sell_order(api, SYMBOLDICT,LEG_TOKEN, option_type, lots):
-    # print('SYMBOLDICT[LEG_TOKEN[option_type]]')
-    # print(LEG_TOKEN[option_type])
-
+def place_market_order(api, LEG_TOKEN, option_type, type, lots):
     # tsym = SYMBOLDICT[LEG_TOKEN[option_type]]['ts']
     tsym = LEG_TOKEN[option_type+'_tsym']
-    order_responce = api.place_order(buy_or_sell='S', product_type='I',
-                        exchange='NFO', tradingsymbol=tsym, 
-                        quantity=lots, discloseqty=0,price_type='MKT', price=0, trigger_price=None,
-                        retention='DAY', remarks='my_order_001')
-    
-
-    order_id = order_responce['norenordno']
-    return order_id
-
-
-def place_buy_order(api, SYMBOLDICT,LEG_TOKEN, option_type, lots):
-    # tsym = SYMBOLDICT[LEG_TOKEN[option_type]]['ts']
-    tsym = LEG_TOKEN[option_type+'_tsym']
-    
-    order_responce = api.place_order(buy_or_sell='B', product_type='I',
+    order_responce = api.place_order(buy_or_sell=type, product_type='I',
                         exchange='NFO', tradingsymbol=tsym, 
                         quantity=lots, discloseqty=0,price_type='MKT', price=0, trigger_price=None,
                         retention='DAY', remarks='my_order_002')
-    
+    if not ('norenordno' in  order_responce):
+        raise ValueError('Error in Order placement')
     order_id = order_responce['norenordno']
     return order_id
 
 
-def place_limit_order(api, SYMBOLDICT,LEG_TOKEN, option_type, type, lots, limit_price):
+def place_limit_order(api, LEG_TOKEN, option_type, type, lots, limit_price):
     # tsym = SYMBOLDICT[LEG_TOKEN[option_type]]['ts']
     tsym = LEG_TOKEN[option_type+'_tsym']
     order_responce = api.place_order(buy_or_sell=type, product_type='I',
@@ -48,21 +32,21 @@ def place_limit_order(api, SYMBOLDICT,LEG_TOKEN, option_type, type, lots, limit_
                         quantity=lots, discloseqty=0,price_type='LMT', price=limit_price, trigger_price=None,
                         retention='DAY', remarks='my_order_002')
 
+    if not ('norenordno' in  order_responce):
+        raise ValueError('Error in Order placement')
     order_id = order_responce['norenordno']
     return order_id
 
-def place_market_order(api, SYMBOLDICT,LEG_TOKEN, option_type, type, lots):
-    # tsym = SYMBOLDICT[LEG_TOKEN[option_type]]['ts']
-    tsym = LEG_TOKEN[option_type+'_tsym']
+
+def place_market_exit(api, tsym, type, lots):
     order_responce = api.place_order(buy_or_sell=type, product_type='I',
                         exchange='NFO', tradingsymbol=tsym, 
                         quantity=lots, discloseqty=0,price_type='MKT', price=0, trigger_price=None,
                         retention='DAY', remarks='my_order_002')
-
+    if not ('norenordno' in  order_responce):
+        raise ValueError('Error in Order placement')
     order_id = order_responce['norenordno']
     return order_id
-
-
 
 
 # Function to check if the order status is complete
