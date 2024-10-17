@@ -13,23 +13,26 @@ import pytz
 
 
 
-# Define the IST timezone
-ist = pytz.timezone('Asia/Kolkata')
-
-
-# Constants
+# Constants Configs
 SYMBOL = 'Nifty bank'
 INITIAL_LOTS = 1  # Start with 1 lot
-BUY_BACK_LOTS = 2
+BUY_BACK_LOTS = 4
 STRIKE_DIFFERENCE = 1000
 ONE_LOT_QUANTITY = 15  # Number of units per lot in Bank Nifty
-TARGET_PROFIT = 5000
-MAX_LOSS = 3000
-MAX_LOSS_PER_LEG = 2000
-SAFETY_STOP_LOSS_PERCENTAGE = 0.96
-BUY_BACK_PERCENTAGE = 0.92
-SELL_TARGET_PERCENTAGE = 0.02
-BUY_BACK_LOSS_PERCENTAGE = 0.93
+TARGET_PROFIT = 120
+MAX_LOSS = 100
+MAX_LOSS_PER_LEG = 1000
+SAFETY_STOP_LOSS_PERCENTAGE = 0.99
+BUY_BACK_PERCENTAGE = 0.98
+SELL_TARGET_PERCENTAGE = 0.08
+BUY_BACK_LOSS_PERCENTAGE = 0.90
+
+
+
+
+
+
+# Strategy LEVEL global Variables
 LEG_TOKEN = {}
 PRICE_DATA = {
     'CE_PRICE_DATA' : {
@@ -50,7 +53,7 @@ PRICE_DATA = {
     }
 }
 ORDER_STATUS = {}
-ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY = []
+CURRENT_STRATEGY_ORDERS = []
 
 # flag to tell us if the websocket is open
 socket_opened = False
@@ -58,6 +61,7 @@ SYMBOLDICT = {}
 
 # Global variables
 strategy_running = False
+exited_strategy = False
 sell_price_ce = 0
 sell_price_pe = 0
 ce_lots = INITIAL_LOTS
@@ -89,6 +93,7 @@ def event_handler_order_update(message):
         ORDER_STATUS[message['norenordno']]['qty'] =  message.get('qty', 0)
         ORDER_STATUS[message['norenordno']]['tsym'] =  message.get('tsym', 0)
         ORDER_STATUS[message['norenordno']]['trantype'] =  message.get('trantype', 'S')
+        ORDER_STATUS[message['norenordno']]['option_type'] =  message.get('remarks', 'exit')
 
         # print('norenordno')
         # print(message['status'].lower())
@@ -165,7 +170,7 @@ def fetch_atm_strike():
     socket.start()
 
     banknifty_price = api.get_quotes(exchange='NSE', token='26009')
-    current_price = '51500'
+    current_price = '51200'
     print(float(current_price))
     atm_strike = round(float(current_price) / 100) * 100
     print(atm_strike)
@@ -261,15 +266,15 @@ def calculate_total_pnl():
     return ce_pnl + pe_pnl + ce_entry_pnl + pe_entry_pnl + ce_re_entry_pnl + pe_re_entry_pnl  
 
 def check_unsold_lots(id):
-    fill = ORDER_STATUS[id]['fillqty']
-    qty = ORDER_STATUS[id]['qty']
+    fill = float(ORDER_STATUS[id]['flqty'])
+    qty = float(ORDER_STATUS[id]['qty'])
     return float(qty)-float(fill)
 
 
 
 # Monitor individual leg logic (CE/PE)
 def monitor_leg(option_type, sell_price, strike_price):
-    global strategy_running, ce_lots, pe_lots, SYMBOLDICT, ORDER_STATUS, PRICE_DATA
+    global strategy_running, ce_lots, pe_lots, SYMBOLDICT, ORDER_STATUS, PRICE_DATA, exited_strategy
     leg_entry = False
     lots = INITIAL_LOTS * ONE_LOT_QUANTITY
     buy_back_lots = BUY_BACK_LOTS * ONE_LOT_QUANTITY
@@ -281,46 +286,63 @@ def monitor_leg(option_type, sell_price, strike_price):
             leg_entry = True
             
             print(f"{option_type} reached 76% of sell price, exiting...")
-            safety_sell_order_id = place_market_order(api, LEG_TOKEN, option_type, 'B', lots)
+            safety_sell_order_id = place_market_order(api, LEG_TOKEN, option_type, 'B', lots, 'end')
 
             while not wait_for_orders_to_complete(safety_sell_order_id, 100):
                 time.sleep(0.5)
 
             PRICE_DATA[option_type+'_PRICE_DATA']['INITIAL_BUY_'+option_type] = ORDER_STATUS[safety_sell_order_id]['avgprc']
 
-            ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY.append(safety_sell_order_id)
+            CURRENT_STRATEGY_ORDERS.append(safety_sell_order_id)
             # important need to check for order execution if not succeded then retry with modify 
             buy_back_price = round_to_nearest_0_05(float(sell_price) * float(BUY_BACK_PERCENTAGE))
-            buy_order_id = place_limit_order(api, LEG_TOKEN, option_type, 'B', buy_back_lots, limit_price=buy_back_price)
-            ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY.append(buy_order_id)
+            buy_order_id = place_limit_order(api, LEG_TOKEN, option_type, 'B', buy_back_lots, limit_price=buy_back_price, leg_type='start')
+            CURRENT_STRATEGY_ORDERS.append(buy_order_id)
 
             while not is_order_complete(buy_order_id, ORDER_STATUS):
                 time.sleep(1)
 
             PRICE_DATA[option_type+'_PRICE_DATA']['BUY_BACK_BUY_'+option_type] = ORDER_STATUS[buy_order_id]['avgprc']
             sell_target_price = round_to_nearest_0_05(float(buy_back_price) * float(1 + SELL_TARGET_PERCENTAGE))
-            sell_order_id = place_limit_order(api, LEG_TOKEN, option_type, 'S', buy_back_lots, limit_price=sell_target_price)
-           
+            sell_order_id = place_limit_order(api, LEG_TOKEN, option_type, 'S', buy_back_lots, limit_price=sell_target_price, leg_type='end')
+            print('OUTSIDE sell_order_id')
+            print(sell_order_id)
+            CURRENT_STRATEGY_ORDERS.append(sell_order_id)
+
+
             ltp = fetch_last_trade_price(option_type)  # Fetch LTP for the option leg
 
             while not is_order_complete(sell_order_id, ORDER_STATUS): #static instead check weather ltp > selltarget_price
+                if exited_strategy:
+                    break
                 ltp = fetch_last_trade_price(option_type)  # Fetch LTP for the option leg
-                pnl = calculate_total_pnl()
-                if pnl <= -MAX_LOSS_PER_LEG or ltp <=  (float(ORDER_STATUS[buy_order_id]['avgprc']) * BUY_BACK_LOSS_PERCENTAGE):
+                legpnl = calculate_leg_pnl(option_type, 'BUY_BACK', BUY_BACK_LOTS)
+                if legpnl <= -MAX_LOSS_PER_LEG or ltp <=  (float(ORDER_STATUS[buy_order_id]['avgprc']) * BUY_BACK_LOSS_PERCENTAGE):
                     print(f"{option_type} reached 10% loss, exiting remaining orders.")
                     unsold_lots = check_unsold_lots(sell_order_id)
                     api.cancel_order(sell_order_id)
-                    place_market_order(api, LEG_TOKEN, option_type, 'B', unsold_lots)
+                    sell_order_id = place_market_order(api, LEG_TOKEN, option_type, 'S', unsold_lots, 'end')
+                    print('INSIDE sell_order_id')
+                    print(sell_order_id)
+                    print('ORDER_STATUS[sell_order_id]')
+                    print(ORDER_STATUS[sell_order_id])
                     break
                 time.sleep(1)
 
-            ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY.append(sell_order_id)
-            PRICE_DATA[option_type+'_PRICE_DATA']['BUY_BACK_SELL_'+option_type] = ORDER_STATUS[sell_order_id]['avgprc']
-
+            CURRENT_STRATEGY_ORDERS.append(sell_order_id)
+            print('--------------------')
+            print(CURRENT_STRATEGY_ORDERS)
+            print(sell_order_id)
+            print('ORDER_STATUS[sell_order_id]')
+            print(ORDER_STATUS[sell_order_id])
+            if exited_strategy:
+                    break
             if wait_for_orders_to_complete(sell_order_id, 40):
-                re_sell_order_id = place_market_order(api, LEG_TOKEN, option_type, 'S', lots)
+                CURRENT_STRATEGY_ORDERS.append(sell_order_id)
+                PRICE_DATA[option_type+'_PRICE_DATA']['BUY_BACK_SELL_'+option_type] = ORDER_STATUS[sell_order_id]['avgprc']
+                re_sell_order_id = place_market_order(api, LEG_TOKEN, option_type, 'S', lots, 'start')
                 wait_for_orders_to_complete(re_sell_order_id, 100)
-                ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY.append(re_sell_order_id)
+                CURRENT_STRATEGY_ORDERS.append(re_sell_order_id)
                 PRICE_DATA[option_type+'_PRICE_DATA']['RE_ENTRY_SELL_'+option_type] = ORDER_STATUS[re_sell_order_id]['avgprc']
 
     return True
@@ -328,16 +350,18 @@ def monitor_leg(option_type, sell_price, strike_price):
 
 # Function to monitor the strategy
 def monitor_strategy():
-    global strategy_running
+    global strategy_running, exited_strategy
     while strategy_running:
+        if exited_strategy:
+            break
         pnl = calculate_total_pnl()  # Fetch the PNL
-        if pnl >= TARGET_PROFIT:
+        if pnl >= TARGET_PROFIT and not exited_strategy:
             print(f"Target profit of ₹{TARGET_PROFIT} reached. Exiting strategy.")
-            strategy_running = False
+            # strategy_running = False
             exit_strategy()
-        elif pnl <= -MAX_LOSS:
+        elif pnl <= -MAX_LOSS and not exited_strategy:
             print(f"Max loss of ₹{MAX_LOSS} reached. Exiting strategy.")
-            strategy_running = False
+            # strategy_running = False
             exit_strategy()
             print('checking pnl')
         time.sleep(5)  # Check PNL every 5 seconds
@@ -367,24 +391,77 @@ def wait_for_orders_to_complete(order_ids, max_retries=100):
     print("All orders are complete.")
     return True
 
-
-
 # Function to exit the strategy
 def exit_strategy():
-    global strategy_running
-    strategy_running = False #static rethink
-    for key in ORDER_STATUS:
-        print(f"Key: {key}")
-        if ORDER_STATUS[key]['status'].lower() != 'complete':
-            responce = api.cancel_order(key)
-            if 'Ok ' in responce['stat']:
-                qty = ORDER_STATUS[key]['qty']
-                tsym = ORDER_STATUS[key]['tsym']
-                typ = ORDER_STATUS[key]['trantype']
-                
-                order_id = place_market_exit(api, tsym, typ, qty)
-                wait_for_orders_to_complete(order_id, 100)
-                return True # static place_market_order()    
+    global strategy_running, exited_strategy 
+    strategy_running = True  # Stop the strategy
+    exited_strategy = True
+    print('Exiting strategy...')
+    print('Current ORDER_STATUS:', ORDER_STATUS)
+
+    # Initialize totals and symbol tracking for CE and PE
+    totals = {'CE': 0, 'PE': 0}
+    symbols = {'CE': '', 'PE': ''}
+
+        # Filter unique values using set
+    unique_orders = set(CURRENT_STRATEGY_ORDERS)
+
+    # Cancel incomplete orders and calculate totals for completed orders
+    for key in unique_orders:
+        order = ORDER_STATUS.get(key)
+        if not order:
+            print(f"Order {key} not found in ORDER_STATUS, skipping...")
+            continue
+
+        status = order.get('status', '').lower()
+
+        if status not in ['open', 'pending', 'complete']:
+            print(f"Order {key} has an invalid status '{status}', skipping...")
+            continue
+        
+        # Cancel any order that is not complete
+    
+        qty = float(order['qty'])
+        tsym = order['tsym']
+        typ = order['trantype']
+        option_info = order.get('option_type', '').split()
+        if len(option_info) < 2:
+            print(f"Invalid option_type format for order {key}, skipping...")
+            continue
+        option_type, leg_type = option_info[0], option_info[1]
+        print(f"Calculation data: Leg Type: {leg_type}, Status: {status}, Option Type: {option_type}, Qty: {qty}, Type: {typ}")
+
+        if status in ['open', 'pending']:
+            print(f"Canceling incomplete order: {key}")
+            api.cancel_order(key)
+            if leg_type == 'start': #if it is initial order and not executed then its quantity shouldn't be considered
+                continue
+            qty = float(order['flqty'])
+            print(f"Adjusted sold quantity: {qty}")
+        
+        
+        # Update total quantities for completed orders
+        if option_type in totals:
+            if typ == 'S':
+                totals[option_type] -= qty
+            elif typ == 'B':
+                totals[option_type] += qty
+            symbols[option_type] = tsym
+
+    print(f"Totals: {totals}, Symbols: {symbols}")
+    # Place market exit orders for remaining positions
+    for option_type, total in totals.items():
+        if total != 0:
+            buy_or_sell = 'S' if total > 0 else 'B'
+            tsym = symbols[option_type]
+            print(f"Placing market exit for {option_type}: {buy_or_sell} {abs(total)} lots")
+            order_id = place_market_exit(api, tsym, buy_or_sell, abs(total))
+            wait_for_orders_to_complete(order_id, 100)
+
+    return True
+
+
+
     
     # Implement logic to close all open orders and exit strategy
     print("Strategy exited.")
@@ -401,13 +478,13 @@ def run_strategy():
                 atm_strike = fetch_atm_strike()
                 print('passed atm strike')
 
-                ce_order_id = place_market_order(api, LEG_TOKEN, 'CE', 'S', lots)
-                pe_order_id = place_market_order(api, LEG_TOKEN, 'PE', 'S', lots)
+                ce_order_id = place_market_order(api, LEG_TOKEN, 'CE', 'S', lots, 'start')
+                pe_order_id = place_market_order(api, LEG_TOKEN, 'PE', 'S', lots, 'start')
                 time.sleep(1)
                 wait_for_orders_to_complete([ce_order_id, pe_order_id], 40)
 
-                ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY.append(ce_order_id)
-                ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY.append(pe_order_id)
+                CURRENT_STRATEGY_ORDERS.append(ce_order_id)
+                CURRENT_STRATEGY_ORDERS.append(pe_order_id)
                 
 
                 sell_price_ce =  ORDER_STATUS[ce_order_id]['avgprc']
@@ -435,7 +512,26 @@ def run_strategy():
             print("Outside trading hours, strategy paused.")
             time.sleep(60)
             raise ValueError("Outside trading hours, strategy paused.")
+    return True
 
 
+def start_the_strategy():
+        """Cancel order logic."""
+        try:
+            run_strategy()
+        except TypeError as e:
+            print(f"Type error: {e}")
+            return None
+        except ZeroDivisionError as e:
+            print(f"Math error: {e}")
+            return None
+        except ValueError as e:
+            print(f"Value error: {e}")
+            return None
+        except Exception as e:
+            # Catch all other exceptions
+            print(f"An unexpected error occurred: {e}")
+            return None
+        
+start_the_strategy()
 
-run_strategy()
