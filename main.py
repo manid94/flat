@@ -10,8 +10,11 @@ from utils import ist_datatime, round_to_nearest_0_05, place_limit_order, place_
 from brokerapi import getflattradeapi, getshoonyatradeapi
 import pytz
 
-
-
+# Common to all strategies
+ORDER_STATUS = {}
+# flag to tell us if the websocket is open
+socket_opened = False
+SYMBOLDICT = {}
 
 # Constants Configs
 SYMBOL = 'Nifty bank'
@@ -52,20 +55,15 @@ PRICE_DATA = {
         'RE_ENTRY_SELL_PE': 0
     }
 }
-ORDER_STATUS = {}
 CURRENT_STRATEGY_ORDERS = []
 
-# flag to tell us if the websocket is open
-socket_opened = False
-SYMBOLDICT = {}
+
 
 # Global variables
 strategy_running = False
 exited_strategy = False
 sell_price_ce = 0
 sell_price_pe = 0
-ce_lots = INITIAL_LOTS
-pe_lots = INITIAL_LOTS
 
 
 #api = getflattradeapi()
@@ -164,7 +162,7 @@ def open_socket():
 
 # Utility function to fetch the ATM strike price
 def fetch_atm_strike():
-    global LEG_TOKEN, SYMBOLDICT
+    global LEG_TOKEN
 
     socket = threading.Thread(target=open_socket, args=())
     socket.start()
@@ -274,7 +272,7 @@ def check_unsold_lots(id):
 
 # Monitor individual leg logic (CE/PE)
 def monitor_leg(option_type, sell_price, strike_price):
-    global strategy_running, ce_lots, pe_lots, SYMBOLDICT, ORDER_STATUS, PRICE_DATA, exited_strategy
+    global strategy_running, ORDER_STATUS, PRICE_DATA, exited_strategy
     leg_entry = False
     lots = INITIAL_LOTS * ONE_LOT_QUANTITY
     buy_back_lots = BUY_BACK_LOTS * ONE_LOT_QUANTITY
@@ -467,7 +465,7 @@ def exit_strategy():
     print("Strategy exited.")
 
 def run_strategy():
-    global strategy_running, sell_price_ce, sell_price_pe, SYMBOLDICT, ORDER_STATUS, PRICE_DATA
+    global strategy_running, sell_price_ce, sell_price_pe, ORDER_STATUS, PRICE_DATA
     start_time = ist_datatime.replace(hour=9, minute=20, second=0, microsecond=0).time()
     end_time = ist_datatime.replace(hour=23, minute=30, second=0, microsecond=0).time()
     lots = INITIAL_LOTS * ONE_LOT_QUANTITY
