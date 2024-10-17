@@ -21,13 +21,13 @@ ist = pytz.timezone('Asia/Kolkata')
 SYMBOL = 'Nifty bank'
 INITIAL_LOTS = 1  # Start with 1 lot
 BUY_BACK_LOTS = 2
-STRIKE_DIFFERENCE = 0
+STRIKE_DIFFERENCE = 1000
 ONE_LOT_QUANTITY = 15  # Number of units per lot in Bank Nifty
 TARGET_PROFIT = 5000
 MAX_LOSS = 3000
 MAX_LOSS_PER_LEG = 2000
-SAFETY_STOP_LOSS_PERCENTAGE = 0.95
-BUY_BACK_PERCENTAGE = 0.90
+SAFETY_STOP_LOSS_PERCENTAGE = 0.96
+BUY_BACK_PERCENTAGE = 0.92
 SELL_TARGET_PERCENTAGE = 0.02
 BUY_BACK_LOSS_PERCENTAGE = 0.93
 LEG_TOKEN = {}
@@ -64,7 +64,7 @@ ce_lots = INITIAL_LOTS
 pe_lots = INITIAL_LOTS
 
 
-api = getflattradeapi()
+#api = getflattradeapi()
 api = getshoonyatradeapi()
 
 
@@ -165,7 +165,7 @@ def fetch_atm_strike():
     socket.start()
 
     banknifty_price = api.get_quotes(exchange='NSE', token='26009')
-    current_price = banknifty_price['lp']
+    current_price = '51500'
     print(float(current_price))
     atm_strike = round(float(current_price) / 100) * 100
     print(atm_strike)
@@ -237,7 +237,7 @@ def calculate_leg_pnl(option_type, type, lots):
         print(f"Error: {node_buy} not found in PRICE_DATAS.")
     
     # Calculate the PNL difference
-    difference = sold_price_or_ltp_price - bought_price_or_ltp_price
+    difference = float(sold_price_or_ltp_price) - float(bought_price_or_ltp_price)
     
     # Print the calculated values for debugging
     # print(f"Sold Price: {sold_price_or_ltp_price}")
@@ -306,7 +306,7 @@ def monitor_leg(option_type, sell_price, strike_price):
             while not is_order_complete(sell_order_id, ORDER_STATUS): #static instead check weather ltp > selltarget_price
                 ltp = fetch_last_trade_price(option_type)  # Fetch LTP for the option leg
                 pnl = calculate_total_pnl()
-                if pnl <= -MAX_LOSS_PER_LEG or ltp <=  (ORDER_STATUS[buy_order_id]['avgprc'] * BUY_BACK_LOSS_PERCENTAGE):
+                if pnl <= -MAX_LOSS_PER_LEG or ltp <=  (float(ORDER_STATUS[buy_order_id]['avgprc']) * BUY_BACK_LOSS_PERCENTAGE):
                     print(f"{option_type} reached 10% loss, exiting remaining orders.")
                     unsold_lots = check_unsold_lots(sell_order_id)
                     api.cancel_order(sell_order_id)

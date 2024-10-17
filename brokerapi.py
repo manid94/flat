@@ -78,4 +78,4 @@ def getshoonyatradeapi():
     current_otp = totp.now()
     api = ShoonyaTradeApiPy()
     api.login(userid=shoonyauser, password=shoonyapwd, twoFA=current_otp, vendor_code=vc, api_secret=app_key, imei=imei)
-
+    return api
