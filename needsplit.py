@@ -7,7 +7,7 @@ from urllib.parse import parse_qs, urlparse
 import hashlib
 import pandas as pd
 from utils import ist_datatime, round_to_nearest_0_05, place_limit_order, place_market_order, place_market_exit, is_order_complete
-from broker import getflattradeapi, getshoonyatradeapi
+from brokerapi import getflattradeapi, getshoonyatradeapi
 import pytz
 
 
@@ -269,7 +269,7 @@ def check_unsold_lots(id):
 
 # Monitor individual leg logic (CE/PE)
 def monitor_leg(option_type, sell_price, strike_price):
-    global strategy_running, ce_lots, pe_lots, SYMBOLDICT, ORDER_STATUS
+    global strategy_running, ce_lots, pe_lots, SYMBOLDICT, ORDER_STATUS, PRICE_DATA
     leg_entry = False
     lots = INITIAL_LOTS * ONE_LOT_QUANTITY
     buy_back_lots = BUY_BACK_LOTS * ONE_LOT_QUANTITY
@@ -279,11 +279,14 @@ def monitor_leg(option_type, sell_price, strike_price):
         ltp = fetch_last_trade_price(option_type)  # Fetch LTP for the option leg
         if ltp <= (float(sell_price) * float(SAFETY_STOP_LOSS_PERCENTAGE)):
             leg_entry = True
+            
             print(f"{option_type} reached 76% of sell price, exiting...")
             safety_sell_order_id = place_market_order(api, LEG_TOKEN, option_type, 'B', lots)
 
             while not wait_for_orders_to_complete(safety_sell_order_id, 100):
                 time.sleep(0.5)
+
+            PRICE_DATA[option_type+'_PRICE_DATA']['INITIAL_BUY_'+option_type] = ORDER_STATUS[safety_sell_order_id]['avgprc']
 
             ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY.append(safety_sell_order_id)
             # important need to check for order execution if not succeded then retry with modify 
@@ -293,10 +296,11 @@ def monitor_leg(option_type, sell_price, strike_price):
 
             while not is_order_complete(buy_order_id, ORDER_STATUS):
                 time.sleep(1)
-            
+
+            PRICE_DATA[option_type+'_PRICE_DATA']['BUY_BACK_BUY_'+option_type] = ORDER_STATUS[buy_order_id]['avgprc']
             sell_target_price = round_to_nearest_0_05(float(buy_back_price) * float(1 + SELL_TARGET_PERCENTAGE))
             sell_order_id = place_limit_order(api, LEG_TOKEN, option_type, 'S', buy_back_lots, limit_price=sell_target_price)
-            ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY.append(sell_order_id)
+           
             ltp = fetch_last_trade_price(option_type)  # Fetch LTP for the option leg
 
             while not is_order_complete(sell_order_id, ORDER_STATUS): #static instead check weather ltp > selltarget_price
@@ -309,11 +313,15 @@ def monitor_leg(option_type, sell_price, strike_price):
                     place_market_order(api, LEG_TOKEN, option_type, 'B', unsold_lots)
                     break
                 time.sleep(1)
-            
+
+            ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY.append(sell_order_id)
+            PRICE_DATA[option_type+'_PRICE_DATA']['BUY_BACK_SELL_'+option_type] = ORDER_STATUS[sell_order_id]['avgprc']
+
             if wait_for_orders_to_complete(sell_order_id, 40):
                 re_sell_order_id = place_market_order(api, LEG_TOKEN, option_type, 'S', lots)
                 wait_for_orders_to_complete(re_sell_order_id, 100)
                 ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY.append(re_sell_order_id)
+                PRICE_DATA[option_type+'_PRICE_DATA']['RE_ENTRY_SELL_'+option_type] = ORDER_STATUS[re_sell_order_id]['avgprc']
 
     return True
 
@@ -382,7 +390,7 @@ def exit_strategy():
     print("Strategy exited.")
 
 def run_strategy():
-    global strategy_running, sell_price_ce, sell_price_pe, SYMBOLDICT, ORDER_STATUS
+    global strategy_running, sell_price_ce, sell_price_pe, SYMBOLDICT, ORDER_STATUS, PRICE_DATA
     start_time = ist_datatime.replace(hour=9, minute=20, second=0, microsecond=0).time()
     end_time = ist_datatime.replace(hour=23, minute=30, second=0, microsecond=0).time()
     lots = INITIAL_LOTS * ONE_LOT_QUANTITY
@@ -400,9 +408,14 @@ def run_strategy():
 
                 ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY.append(ce_order_id)
                 ORDER_ID_DATAS_RELATED_TO_CURRENT_STRATEGY.append(pe_order_id)
+                
 
                 sell_price_ce =  ORDER_STATUS[ce_order_id]['avgprc']
                 sell_price_pe = ORDER_STATUS[pe_order_id]['avgprc']
+                PRICE_DATA['CE_PRICE_DATA']['INITIAL_SELL_CE'] = sell_price_ce
+                PRICE_DATA['PE_PRICE_DATA']['INITIAL_SELL_PE'] = sell_price_pe
+
+
 
                 strategy_running = True
 
