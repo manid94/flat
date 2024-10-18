@@ -168,7 +168,7 @@ def fetch_atm_strike():
     socket.start()
 
     banknifty_price = api.get_quotes(exchange='NSE', token='26009')
-    current_price = '51200'
+    current_price = banknifty_price['lp']
     print(float(current_price))
     atm_strike = round(float(current_price) / 100) * 100
     print(atm_strike)
@@ -342,7 +342,7 @@ def monitor_leg(option_type, sell_price, strike_price):
                 wait_for_orders_to_complete(re_sell_order_id, 100)
                 CURRENT_STRATEGY_ORDERS.append(re_sell_order_id)
                 PRICE_DATA[option_type+'_PRICE_DATA']['RE_ENTRY_SELL_'+option_type] = ORDER_STATUS[re_sell_order_id]['avgprc']
-
+    print('exited monitor_leg')
     return True
 
 
@@ -361,8 +361,10 @@ def monitor_strategy():
             print(f"Max loss of ₹{MAX_LOSS} reached. Exiting strategy.")
             # strategy_running = False
             exit_strategy()
-            print('checking pnl')
+            print(f'checking pnl{calculate_total_pnl()}')
         time.sleep(5)  # Check PNL every 5 seconds
+    print('exited monitor_strategy')
+    return True
 
 
 # Retry logic with a maximum number of attempts to avoid an infinite loop
@@ -466,7 +468,7 @@ def exit_strategy():
 
 def run_strategy():
     global strategy_running, sell_price_ce, sell_price_pe, ORDER_STATUS, PRICE_DATA
-    start_time = ist_datatime.replace(hour=9, minute=20, second=0, microsecond=0).time()
+    start_time = ist_datatime.replace(hour=9, minute=17, second=0, microsecond=0).time()
     end_time = ist_datatime.replace(hour=23, minute=30, second=0, microsecond=0).time()
     lots = INITIAL_LOTS * ONE_LOT_QUANTITY
     while True:
@@ -506,10 +508,14 @@ def run_strategy():
                 ce_thread.join()
                 pe_thread.join()
                 strategy_thread.join() # static uncomment
+                if exited_strategy:
+                    break
         else:
             print("Outside trading hours, strategy paused.")
             time.sleep(60)
             raise ValueError("Outside trading hours, strategy paused.")
+        
+    print('exited strategy')
     return True
 
 

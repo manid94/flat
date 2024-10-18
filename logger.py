@@ -4,8 +4,8 @@ import random
 import os
 
 class LocalJsonLogger:
-    def __init__(self, log_file_name):
-        self.log_file_name = log_file_name
+    def __init__(self):
+        self.log_file_name = f'logger_files/trading_log_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json'
         self.log_data = []
 
         # Create a new log file locally
@@ -31,8 +31,20 @@ class LocalJsonLogger:
             json.dump(self.log_data, file, indent=4)
         print(f"Appended new entry to '{self.log_file_name}'.")
 
-    def generate_log_entry(self):
+    def generate_log_entry(tsymbol,orderno,type,qty,ordered_price,order_type,fillqty=0,avg_price = 0,status='placed'):
         """Generate a new log entry with random data (simulating a trading strategy)."""
+        return {
+            "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "tsymbol": tsymbol,
+            "orderno": orderno,
+            "type": type,
+            "quantity": str(qty),
+            "ordered_price": ordered_price,
+            "executed_price": avg_price,
+            "executed_quantity": str(fillqty),
+            "order_type": order_type,
+            "status": status   
+        }
         return {
             "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "tsymbol": f"BANKNIFTY23OCT24C{random.randint(50000, 60000)}",
