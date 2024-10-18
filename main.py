@@ -1,14 +1,12 @@
-import datetime
-import time
+from datetime import datetime
 import threading
 import time
 import os, sys
 from urllib.parse import parse_qs, urlparse
 import hashlib
 import pandas as pd
-from utils import ist_datatime, round_to_nearest_0_05, place_limit_order, place_market_order, place_market_exit, is_order_complete
+from utils import ist, round_to_nearest_0_05, place_limit_order, place_market_order, place_market_exit, is_order_complete
 from brokerapi import getflattradeapi, getshoonyatradeapi
-import pytz
 
 # Common to all strategies
 ORDER_STATUS = {}
@@ -64,6 +62,7 @@ strategy_running = False
 exited_strategy = False
 sell_price_ce = 0
 sell_price_pe = 0
+ist_datatime = datetime.now(ist)
 
 
 #api = getflattradeapi()
@@ -472,7 +471,7 @@ def run_strategy():
     end_time = ist_datatime.replace(hour=23, minute=30, second=0, microsecond=0).time()
     lots = INITIAL_LOTS * ONE_LOT_QUANTITY
     while True:
-        current_time = ist_datatime.time()
+        current_time = datetime.now(ist).time()
         if start_time <= current_time <= end_time:
             if not strategy_running:
                 atm_strike = fetch_atm_strike()
