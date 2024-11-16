@@ -15,13 +15,14 @@ chrome_driver_path = "C:/WebDriver/chromedriver.exe"
 service = Service(chrome_driver_path)
 driver = webdriver.Chrome(service=service)
 
+URL = "https://auth.flattrade.in/?app_key=cb95baef93fa48bb8dd39642a77bb6bb"
 USERID = "FT053455"
 PWD = "Deepak@94"
 factor = 'QA622YDDQD2DXH7F27A25F6DWU33AR2V'
 totp = pyotp.TOTP(factor)
 
 # Open a webpage
-driver.get("https://auth.flattrade.in/?app_key=cb95baef93fa48bb8dd39642a77bb6bb")
+driver.get(URL)
 time.sleep(5)
 # Locate the input fields and fill them in
 try:
