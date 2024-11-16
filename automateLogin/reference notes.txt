@@ -1,0 +1,94 @@
+To run a Selenium automation script with ChromeDriver on AWS Linux, you'll need to set up both selenium and ChromeDriver on the server. Here’s a step-by-step guide:
+
+Step 1: Set Up Python and Selenium on AWS Linux
+    Install Python (if not already installed):
+
+    bash
+    Copy code
+    sudo yum install python3 -y
+    Install Selenium:
+
+    bash
+    Copy code
+    python3 -m pip install selenium
+Step 2: Install Chrome and ChromeDriver
+Install Google Chrome:
+
+    First, set up the Google Chrome repository:
+
+    bash
+    Copy code
+    sudo tee -a /etc/yum.repos.d/google-chrome.repo << EOF
+    [google-chrome]
+    name=google-chrome
+    baseurl=https://dl.google.com/linux/chrome/rpm/stable/x86_64
+    enabled=1
+    gpgcheck=1
+    gpgkey=https://dl.google.com/linux/linux_signing_key.pub
+    EOF
+    Then, install Google Chrome:
+
+    bash
+    Copy code
+    sudo yum install google-chrome-stable -y
+    Download ChromeDriver:
+
+    First, check your installed Chrome version:
+
+    bash
+    Copy code
+    google-chrome --version
+    Go to the ChromeDriver download page and download the version that matches your Chrome version:
+
+    bash
+    Copy code
+    wget https://chromedriver.storage.googleapis.com/<version>/chromedriver_linux64.zip
+    Replace <version> with the correct version number, such as 114.0.5735.90.
+
+    Extract ChromeDriver:
+
+    bash
+    Copy code
+    unzip chromedriver_linux64.zip
+    Move the chromedriver executable to /usr/local/bin so it’s available in the PATH:
+
+    bash
+    Copy code
+    sudo mv chromedriver /usr/local/bin/
+Step 3: Set Up Selenium Code to Use ChromeDriver
+    In your Python script, set up Selenium with Chrome and ChromeDriver.
+
+    Edit Your Selenium Script:
+
+    python
+    Copy code
+        from selenium import webdriver
+        from selenium.webdriver.chrome.service import Service
+
+        # Set up Chrome options for headless mode (optional)
+        chrome_options = webdriver.ChromeOptions()
+        chrome_options.add_argument("--headless")  # Run in headless mode for servers
+        chrome_options.add_argument("--no-sandbox")  # Recommended for running on Linux servers
+        chrome_options.add_argument("--disable-dev-shm-usage")  # Overcome limited resource problems
+
+        # Initialize ChromeDriver with the service
+        service = Service("/usr/local/bin/chromedriver")
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+
+        # Open a page to test
+        driver.get("https://example.com")
+        print(driver.title)
+
+        driver.quit()
+Step 4: Run the Script on AWS Linux
+    Make sure the script is executable:
+
+    bash
+    Copy code
+    chmod +x automateLogin.py
+    Run the script:
+
+    bash
+    Copy code
+    python3 automateLogin.py
+    This setup will enable you to run your Selenium automation script with ChromeDriver on AWS Linux.

@@ -58,12 +58,13 @@ try:
 
     
     # Wait for the page to load (adjust sleep time as needed)
-    time.sleep(60)
+    time.sleep(3)
     
     # Get the new URL after redirection
     new_url = driver.current_url
     print("Redirected URL:", new_url)
+    time.sleep(60)
 finally:
     # Close the driver
     print('quit')
-    # driver.quit()
+    driver.quit()
