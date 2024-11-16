@@ -15,8 +15,8 @@ vc      = 'FA348190_U'
 app_key = '819917b958f91bcd6d119c8e2132596b'
 imei    = 'abc1234'
 
-
-
+#URL to get session
+api_url = "https://auth.flattrade.in/?app_key=a3bc1c61a0a1487c89ad5f9175df42cd"
 
 
 
