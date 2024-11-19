@@ -6,7 +6,7 @@ from urllib.parse import parse_qs, urlparse
 import hashlib
 import pandas as pd
 from utils import ist, round_to_nearest_0_05, place_limit_order, place_market_order, place_market_exit, is_order_complete
-from brokerapi import getflattradeapi, getshoonyatradeapi
+from automateLogin.brokerapi import getflattradeapi, getshoonyatradeapi
 
 # Common to all strategies
 ORDER_STATUS = {}

@@ -12,7 +12,7 @@ shoonyauser  = 'FA348190'
 shoonyapwd     = 'Deepak@94'
 factor2 = '262M3JU777Q5ZEM6KT266CF2V472QODA'
 vc      = 'FA348190_U'
-app_key = '819917b958f91bcd6d119c8e2132596b'
+app_key = 'a3bc1c61a0a1487c89ad5f9175df42cd'
 imei    = 'abc1234'
 
 #URL to get session
@@ -53,7 +53,6 @@ def check_token():
 
 
 def getflattradeapi(token):
-    token = check_token()
     class FlatTradeApiPy(NorenApi):
         def __init__(self):
             NorenApi.__init__(self, host='https://piconnect.flattrade.in/PiConnectTP/', 
