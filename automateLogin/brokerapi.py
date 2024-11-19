@@ -3,6 +3,7 @@ import datetime
 import pyotp
 from google.cloud import storage
 from NorenRestApiPy.NorenApi import NorenApi
+from generateToken import generateToken
 
 # Credentials - define these variables
 password = 'Deepak@94'
@@ -52,7 +53,9 @@ def check_token():
         return token
 
 
-def getflattradeapi(token):
+def getflattradeapi():
+    token = generateToken()
+
     class FlatTradeApiPy(NorenApi):
         def __init__(self):
             NorenApi.__init__(self, host='https://piconnect.flattrade.in/PiConnectTP/', 
