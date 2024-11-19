@@ -40,8 +40,3 @@ def main():
     print(api.searchscrip(exchange='NSE', searchtext='Nifty 50'))
 main()
 
-
-
-
-APIKEY = 'a3bc1c61a0a1487c89ad5f9175df42cd'
-secretKey = '2024.a1f9bc716ad94557b074633e1b4c045ca0775ac48868ef4e'
