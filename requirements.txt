@@ -3,5 +3,11 @@ google-cloud-storage
 pytotp
 websocket-client
 NorenRestApiPy
-pyotp
 selenium
+pyotp
+pytz
+pandas
+deepdiff
+datetime
+boto3
+flask
