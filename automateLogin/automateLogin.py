@@ -33,6 +33,7 @@ options = webdriver.ChromeOptions()
 options.add_argument("--headless")  # If running on a server
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
+options.add_argument("--disable-gpu")
 
 # # Launch Chrome browser
 driver = webdriver.Chrome(service=service, options=options)
