@@ -11,3 +11,4 @@ deepdiff
 datetime
 boto3
 flask
+webdriver-manager
