@@ -8,6 +8,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 # Path to your ChromeDriver executable
 chrome_driver_path = "C:/WebDriver/chromedriver.exe"
@@ -21,6 +22,23 @@ USERID = "FT053455"
 PWD = "Deepak@94"
 factor = 'QA622YDDQD2DXH7F27A25F6DWU33AR2V'
 totp = pyotp.TOTP(factor)
+
+
+
+# Automatically download and configure ChromeDriver
+service = Service(ChromeDriverManager().install())
+
+# Chrome options for headless mode (optional)
+options = webdriver.ChromeOptions()
+options.add_argument("--headless")  # If running on a server
+options.add_argument("--no-sandbox")
+options.add_argument("--disable-dev-shm-usage")
+
+# # Launch Chrome browser
+driver = webdriver.Chrome(service=service, options=options)
+# driver.get("https://example.com")
+# print(driver.title)
+# driver.quit()
 
 
 def autoLogin(key):

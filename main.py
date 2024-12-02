@@ -65,8 +65,8 @@ sell_price_pe = 0
 ist_datatime = datetime.now(ist)
 
 
-#api = getflattradeapi()
-api = getshoonyatradeapi()
+api = getflattradeapi()
+#api = getshoonyatradeapi()
 
 
 
@@ -521,6 +521,9 @@ def run_strategy():
 def start_the_strategy():
         """Cancel order logic."""
         try:
+            
+            print(api.searchscrip(exchange='NSE', searchtext='Nifty 50'))
+            return True
             run_strategy()
         except TypeError as e:
             print(f"Type error: {e}")

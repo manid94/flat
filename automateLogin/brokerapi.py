@@ -3,7 +3,7 @@ import datetime
 import pyotp
 from google.cloud import storage
 from NorenRestApiPy.NorenApi import NorenApi
-from generateToken import generateToken
+from automateLogin.generateToken import generateToken
 
 # Credentials - define these variables
 password = 'Deepak@94'

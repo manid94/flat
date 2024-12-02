@@ -3,8 +3,7 @@ import requests
 import time
 from urllib.parse import parse_qs, urlparse
 import hashlib
-from automateLogin import autoLogin
-from brokerapi import getflattradeapi
+from automateLogin.automateLogin import autoLogin
 
 password = 'Deepak@94'
 topt_key = 'QA622YDDQD2DXH7F27A25F6DWU33AR2V'
