@@ -10,12 +10,12 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
-# Path to your ChromeDriver executable
-chrome_driver_path = "C:/WebDriver/chromedriver.exe"
+# # Path to your ChromeDriver executable
+# chrome_driver_path = "C:/WebDriver/chromedriver.exe"
 
-# Create a Service object and pass it to Chrome
-service = Service(chrome_driver_path)
-driver = webdriver.Chrome(service=service)
+# # Create a Service object and pass it to Chrome
+# service = Service(chrome_driver_path)
+# driver = webdriver.Chrome(service=service)
 
 URL = "https://auth.flattrade.in/?app_key="
 USERID = "FT053455"
